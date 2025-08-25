@@ -168,15 +168,13 @@
         return "recently";
     }
 
-    function formatViews(item) {
-        if(item.statistics && item.statistics.viewCount){
-            let views = Number(item.statistics.viewCount);
-            if(views >= 1e9) return (views/1e9).toFixed(1)+'B views';
-            if(views >= 1e6) return (views/1e6).toFixed(1)+'M views';
-            if(views >= 1e3) return (views/1e3).toFixed(1)+'K views';
-            return views + ' views';
-        }
-        return '';
+    function formatViews(views) {
+        if(!views) return '';
+        views = Number(views);
+        if(views >= 1e9) return (views/1e9).toFixed(1)+'B views';
+        if(views >= 1e6) return (views/1e6).toFixed(1)+'M views';
+        if(views >= 1e3) return (views/1e3).toFixed(1)+'K views';
+        return views + ' views';
     }
 
     function searchYouTube() {
@@ -190,22 +188,28 @@
                 const resultsList = document.getElementById('resultsList');
                 resultsList.innerHTML = '';
                 if (data.items && data.items.length > 0) {
-                    data.items.forEach((item) => {
-                        const title = item.snippet.title;
-                        const videoId = item.id.videoId;
-                        const thumbnailUrl = item.snippet.thumbnails.medium.url;
-                        const listItem = document.createElement('li');
-                        listItem.innerHTML = `
-                            <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">
-                                <img src="${thumbnailUrl}" alt="${title}">
-                            </a>
-                            <div>
-                                <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">${title}</a>
-                                <span class="video-info">${formatViews(item)} • ${formatDate(item.snippet.publishedAt)}</span>
-                            </div>
-                        `;
-                        resultsList.appendChild(listItem);
-                    });
+                    const videoIds = data.items.map(item => item.id.videoId).join(',');
+                    // fetch statistics for all search results
+                    fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${videoIds}&key=${apiKey}`)
+                        .then(resp => resp.json())
+                        .then(statsData => {
+                            statsData.items.forEach((item) => {
+                                const title = item.snippet.title;
+                                const videoId = item.id;
+                                const thumbnailUrl = item.snippet.thumbnails.medium.url;
+                                const listItem = document.createElement('li');
+                                listItem.innerHTML = `
+                                    <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">
+                                        <img src="${thumbnailUrl}" alt="${title}">
+                                    </a>
+                                    <div>
+                                        <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">${title}</a>
+                                        <span class="video-info">${formatViews(item.statistics.viewCount)} • ${formatDate(item.snippet.publishedAt)}</span>
+                                    </div>
+                                `;
+                                resultsList.appendChild(listItem);
+                            });
+                        });
                 } else {
                     resultsList.innerHTML = '<li>No results found</li>';
                 }
@@ -239,7 +243,7 @@
                             </a>
                             <div>
                                 <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">${title}</a>
-                                <span class="video-info">${formatViews(item)} • ${formatDate(item.snippet.publishedAt)}</span>
+                                <span class="video-info">${formatViews(item.statistics.viewCount)} • ${formatDate(item.snippet.publishedAt)}</span>
                             </div>
                         `;
                         trendingList.appendChild(listItem);
