@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Video Search</title>
+    <style>
+        body {
+            font-family: "Segoe UI", Roboto, Arial, sans-serif;
+            margin: 20px;
+            background: #0f0f0f;
+            color: #f1f1f1;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input, button {
+            padding: 10px 14px;
+            margin: 5px 5px 5px 0;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background: #1c1c1c;
+            color: #f1f1f1;
+            transition: all 0.2s ease-in-out;
+        }
+
+        input {
+            width: 40%;
+        }
+
+        input:focus {
+            border-color: #1a73e8;
+            outline: none;
+            box-shadow: 0 0 6px rgba(26, 115, 232, 0.5);
+        }
+
+        button {
+            background: #1a73e8;
+            color: white;
+            border: none;
+        }
+
+        button:hover {
+            background: #1558b0;
+        }
+
+        #justFuckingGoButton {
+            background: #e53935;
+            color: white;
+        }
+
+        #justFuckingGoButton:hover {
+            background: #b71c1c;
+        }
+
+        ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        li {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border-radius: 10px;
+            background: #1c1c1c;
+            transition: transform 0.15s ease, background 0.2s;
+        }
+
+        li:hover {
+            transform: translateY(-3px);
+            background: #2a2a2a;
+        }
+
+        a {
+            color: #1a73e8;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        img {
+            margin-right: 15px;
+            width: 120px;
+            height: 90px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+
+        h2 {
+            margin-top: 30px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 6px;
+            color: #f1f1f1;
+        }
+
+        .button-container {
+            margin-top: 20px;
+        }
+
+        #resultsContainer {
+            display: none;
+        }
+
+        #videoEmbed {
+            display: none;
+            margin-top: 20px;
+        }
+
+        .video-date {
+            font-size: 14px;
+            color: #bbb;
+            margin-left: 10px;
+        }
+
+        /* remove the numbers before video titles */
+        li a:nth-of-type(2) {
+            display: inline-block;
+            text-indent: 0;
+        }
+    </style>
+</head>
+<body>
+
+<h1><img src="https://media.tenor.com/2roX3uxz_68AAAAM/cat-space.gif" style="height: 1em; cursor: pointer;" onclick="goBackToHomepage()" /> YouTube Video Search</h1>
+<input type="text" id="searchQuery" placeholder="Enter search query" />
+<button onclick="searchYouTube()">Search</button>
+<button id="justFuckingGoButton" onclick="googleSearch()">Just fucking go</button>
+
+<h2 id="trendingHeader">Trending Videos</h2>
+<ul id="trendingList"></ul>
+
+<div id="resultsContainer">
+    <h2>Search Results</h2>
+    <ul id="resultsList"></ul>
+    <div class="button-container">
+        <button onclick="goBackToHomepage()">Go back</button>
+    </div>
+</div>
+
+<script>
+    const apiKey = 'AIzaSyDeJuBL55wESEwMHAgbn7kwIp888gVjZ_0';
+
+    function searchYouTube() {
+        const query = document.getElementById('searchQuery').value;
+        const maxResults = 30;
+        const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=${maxResults}&key=${apiKey}`;
+
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                const resultsList = document.getElementById('resultsList');
+                resultsList.innerHTML = '';
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach((item) => {
+                        const title = item.snippet.title;
+                        const videoId = item.id.videoId;
+                        const thumbnailUrl = item.snippet.thumbnails.medium.url;
+                        const date = new Date(item.snippet.publishedAt).toLocaleDateString();
+                        const listItem = document.createElement('li');
+                        listItem.innerHTML = `
+                            <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">
+                                <img src="${thumbnailUrl}" alt="${title}">
+                            </a>
+                            <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">
+                                ${title}
+                            </a>
+                            <span class="video-date">(${date})</span>
+                        `;
+                        resultsList.appendChild(listItem);
+                    });
+                } else {
+                    resultsList.innerHTML = '<li>No results found</li>';
+                }
+                document.getElementById('trendingHeader').style.display = 'none';
+                document.getElementById('trendingList').style.display = 'none';
+                document.getElementById('resultsContainer').style.display = 'block';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error fetching data from YouTube API');
+            });
+    }
+
+    function getTrendingVideos() {
+        const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=US&maxResults=30&key=${apiKey}`;
+
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                const trendingList = document.getElementById('trendingList');
+                trendingList.innerHTML = '';
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach((item) => {
+                        const title = item.snippet.title;
+                        const videoId = item.id;
+                        const thumbnailUrl = item.snippet.thumbnails.medium.url;
+                        const date = new Date(item.snippet.publishedAt).toLocaleDateString();
+                        const listItem = document.createElement('li');
+                        listItem.innerHTML = `
+                            <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">
+                                <img src="${thumbnailUrl}" alt="${title}">
+                            </a>
+                            <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">
+                                ${title}
+                            </a>
+                            <span class="video-date">(${date})</span>
+                        `;
+                        trendingList.appendChild(listItem);
+                    });
+                } else {
+                    trendingList.innerHTML = '<li>No trending videos found</li>';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error fetching trending data from YouTube API');
+            });
+    }
+
+    function goBackToHomepage() {
+        document.getElementById('resultsList').innerHTML = '';
+        document.getElementById('resultsContainer').style.display = 'none';
+        document.getElementById('trendingHeader').style.display = 'block';
+        document.getElementById('trendingList').style.display = 'block';
+        document.getElementById('searchQuery').value = '';
+        document.getElementById('searchQuery').focus();
+        getTrendingVideos();
+    }
+    
+    document.getElementById('searchQuery').addEventListener('click', function() {
+        this.value = '';
+    });
+
+    document.getElementById('searchQuery').addEventListener('keypress', function(event) {
+        if (event.key === 'Enter') {
+            searchYouTube();
+        }
+    });
+
+    function googleSearch() {
+        const query = document.getElementById('searchQuery').value;
+        const url = `https://www.google.com/search?q=${encodeURIComponent(query)}+site:youtube.com&btnI`;
+        window.location.href = url;
+    }
+
+    window.onload = function() {
+        document.getElementById('searchQuery').focus();
+        getTrendingVideos();
+    };
+</script>
+
+</body>
+</html>

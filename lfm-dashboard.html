@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Last.fm Dashboard</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; background: #121212; color: #f0f0f0; }
+    h1 a { color: #d51007; text-decoration: none; }
+    h1 a:hover { text-decoration: underline; }
+    a { color: #f0f0f0; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    #top-artists a { color: #d51007; }
+    #top-artists a:hover { text-decoration: underline; }
+    img { width: 40px; height: 40px; object-fit: cover; margin-right: 8px; vertical-align: middle; }
+    button { background: #d51007; border: none; color: #fff; padding: 6px 12px; cursor: pointer; border-radius: 4px; transition: background 0.2s ease; }
+    button:hover { background: #b50d06; }
+    button.disabled { background: #333; cursor: default; }
+    button.active { background: #8f0a04; }
+    .heart-btn { background: transparent; font-size: 16px; padding: 0 5px; color: #888; }
+    .heart-btn.loved { color: #d51007; }
+    ul { list-style-type: none; margin: 0; padding-left: 0; }
+    li { margin: 4px 0; }
+    #top-artists { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; }
+    #top-albums { display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(2, auto); gap: 8px; margin-top: 10px; }
+    .album { position: relative; }
+    .album img { width: 100%; height: auto; border-radius: 4px; cursor: pointer; }
+    .popup { display: none; position: absolute; background: #1e1e1e; color: #f0f0f0; border: 1px solid #333; padding: 10px; border-radius: 6px; max-width: 220px; z-index: 1000; font-size: 13px; line-height: 1.4; }
+    .popup h4 { margin-top: 0; margin-bottom: 6px; font-size: 14px; color: #d51007; }
+    .track-date { font-size: 12px; color: #aaa; margin-left: 6px; }
+    .count { display: inline-block; width: 28px; }
+  </style>
+</head>
+<body>
+  <h1><a href="https://www.last.fm/user/DVOID_ReASoN" target="_blank">Last.fm Dashboard</a></h1>
+
+  <h2>Recent Tracks</h2>
+  <ul id="recent-tracks"></ul>
+
+  <h2>Top Artists (Last Month)</h2>
+  <ul id="top-artists"></ul>
+
+  <h2>Top Albums (Last Month)</h2>
+  <div id="top-albums"></div>
+
+  <h2>Top Tracks (Last Month)</h2>
+  <ul id="top-tracks"></ul>
+
+  <div id="popup" class="popup"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+  <script>
+    const apiKey = "d5180d76bc79811f5cfbc6967039dc8f";
+    const apiSecret = "75bb828d197b995631210c8a4e4a2105";
+    const sessionKey = "ZijgMsYIpNqrvhcYfy0FsGPhj74M53UZ";
+    const username = "DVOID_ReASoN";
+
+    const popup = document.getElementById('popup');
+
+    function showPopup(x, y, html) {
+      popup.innerHTML = html;
+      popup.style.left = x + 'px';
+      popup.style.top = y + 'px';
+      popup.style.display = 'block';
+    }
+    function hidePopup() { popup.style.display = 'none'; }
+
+    function formatDate(uts) {
+      const date = new Date(uts*1000);
+      return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute:'2-digit' });
+    }
+    function pad(num) { return num.toString().padStart(2,'0'); }
+    function youtubeLink(trackName, artistName) {
+      const query = encodeURIComponent(`${trackName} ${artistName}`);
+      return `https://www.google.com/search?q=${query}+site:youtube.com&btnI`;
+    }
+
+    async function callLastFM(method, params={}, auth=false) {
+      let url = `https://ws.audioscrobbler.com/2.0/?method=${method}&api_key=${apiKey}&format=json`;
+      for (const k in params) url += `&${k}=${encodeURIComponent(params[k])}`;
+
+      if(auth) {
+        params.api_key = apiKey;
+        params.sk = sessionKey;
+        params.method = method;
+
+        // MD5 using CryptoJS
+        const sigHex = CryptoJS.MD5(
+          Object.keys(params).sort().map(k => k + params[k]).join('') + apiSecret
+        ).toString();
+
+        const body = new URLSearchParams({...params, api_sig: sigHex, format:'json'});
+        const res = await fetch("https://ws.audioscrobbler.com/2.0/", {
+          method:'POST',
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body
+        });
+        return res.json();
+      }
+      return fetch(url).then(r=>r.json());
+    }
+
+    async function loadRecentTracks() {
+      const data = await callLastFM("user.getrecenttracks", {user: username, limit: 100});
+      const tracks = data.recenttracks.track;
+      const list = document.getElementById('recent-tracks');
+      list.innerHTML = '';
+
+      const lovedData = await callLastFM("user.getlovedtracks", {user: username, limit:200});
+      const lovedSet = new Set(lovedData.lovedtracks?.track?.map(t=>t.name + "|" + t.artist.name));
+
+      tracks.forEach((track)=>{
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.classList.add('heart-btn');
+        btn.innerHTML = '&#10084;';
+        const key = track.name + "|" + track.artist['#text'];
+        if(lovedSet.has(key)) btn.classList.add('loved');
+        btn.onclick = async ()=>{
+          const loved = btn.classList.toggle('loved');
+          const method = loved ? 'track.love':'track.unlove';
+          await callLastFM(method,{track:track.name, artist:track.artist['#text']},true);
+        };
+        li.appendChild(btn);
+
+        const link = document.createElement('a');
+        link.href = youtubeLink(track.name, track.artist['#text']);
+        link.target = "_blank";
+        link.textContent = `${track.name} - ${track.artist['#text']}`;
+        li.appendChild(link);
+
+        if(track.date) {
+          const dateSpan = document.createElement('span');
+          dateSpan.className = 'track-date';
+          dateSpan.textContent = formatDate(track.date.uts);
+          li.appendChild(dateSpan);
+        }
+        list.appendChild(li);
+      });
+    }
+
+    const artistInfoMap = {};
+    const albumInfoMap = {};
+
+    async function loadTopArtists() {
+      const data = await callLastFM("user.gettopartists",{user:username, period:'1month', limit:20});
+      const list = document.getElementById('top-artists');
+      list.innerHTML = '';
+      const artists = data.topartists.artist;
+      const half = Math.ceil(artists.length/2);
+
+      // preload artist info
+      for(const artist of artists){
+        const infoRes = await callLastFM("artist.getInfo",{artist: artist.name});
+        artistInfoMap[artist.name] = infoRes.artist;
+      }
+
+      artists.forEach((artist, idx)=>{
+        const col = idx < half ? 0 : 1;
+        const row = idx % half;
+        const li = document.createElement('li');
+
+        const countSpan = document.createElement('span');
+        countSpan.className = 'count';
+        countSpan.textContent = `${pad(idx+1)}. `;
+        li.appendChild(countSpan);
+
+        const link = document.createElement('a');
+        link.href = artist.url;
+        link.target = "_blank";
+        link.textContent = artist.name;
+        li.appendChild(link);
+
+        li.onmouseover = e=>{
+          const info = artistInfoMap[artist.name];
+          showPopup(e.pageX+10, e.pageY+10,
+            `<h4>${artist.name}</h4>
+             <div>${info.tags.tag.map(t=>t.name).join(', ')}</div>
+             <p>${info.bio.summary}</p>`);
+        };
+        li.onmouseout = hidePopup;
+
+        li.style.gridColumn = col+1;
+        li.style.gridRow = row+1;
+        list.appendChild(li);
+      });
+    }
+
+    async function loadTopAlbums() {
+      const data = await callLastFM("user.gettopalbums",{user:username, period:'1month', limit:12});
+      const grid = document.getElementById('top-albums');
+      grid.innerHTML = '';
+
+      // preload album info
+      for(const album of data.topalbums.album){
+        const infoRes = await callLastFM("album.getInfo",{artist: album.artist.name, album: album.name});
+        albumInfoMap[album.artist.name+'|'+album.name] = infoRes.album;
+      }
+
+      data.topalbums.album.forEach(album=>{
+        const div = document.createElement('div');
+        div.className = 'album';
+        const link = document.createElement('a');
+        link.href = album.url;
+        link.target = "_blank";
+        const img = document.createElement('img');
+        img.src = album.image[2]['#text'];
+        link.appendChild(img);
+        div.appendChild(link);
+
+        div.onmouseover = e=>{
+          const info = albumInfoMap[album.artist.name+'|'+album.name];
+          let year = "";
+          if(info && info.wiki && info.wiki.published){
+            year = " ("+new Date(info.wiki.published).getFullYear()+")";
+          }
+          showPopup(e.pageX+10, e.pageY+10,
+            `<h4>${album.name}${year}</h4>
+             <div>${info?.tags?.tag?.map(t=>t.name).join(', ')||""}</div>`);
+        };
+        div.onmouseout = hidePopup;
+
+        grid.appendChild(div);
+      });
+    }
+
+    async function loadTopTracks() {
+      const data = await callLastFM("user.gettoptracks",{user:username, period:'1month', limit:20});
+      const list = document.getElementById('top-tracks');
+      list.innerHTML = '';
+      data.toptracks.track.forEach((track, idx)=>{
+        const li = document.createElement('li');
+        const countSpan = document.createElement('span');
+        countSpan.className = 'count';
+        countSpan.textContent = `${pad(idx+1)}. `;
+        li.appendChild(countSpan);
+
+        const link = document.createElement('a');
+        const artistName = track.artist.name || track.artist['#text'];
+        link.href = youtubeLink(track.name, artistName);
+        link.target = "_blank";
+        link.textContent = `${track.name} - ${artistName}`;
+        li.appendChild(link);
+        list.appendChild(li);
+      });
+    }
+
+    loadRecentTracks();
+    loadTopArtists();
+    loadTopAlbums();
+    loadTopTracks();
+  </script>
+</body>
+</html>

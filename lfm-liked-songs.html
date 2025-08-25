@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>My Liked Songs</title>
+<style>
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: #121212;
+  color: #eee;
+  margin: 0;
+  padding: 20px;
+}
+h1 {
+  text-align: center;
+  color: #f0a500;
+}
+#controls {
+  text-align: center;
+  margin: 20px 0;
+}
+button {
+  margin: 0 5px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background: #333;
+  color: #eee;
+  transition: 0.2s;
+}
+button:hover {
+  background: #555;
+}
+#songs {
+  max-width: 900px;
+  margin: 0 auto;
+}
+.song {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #333;
+  transition: background 0.2s;
+}
+.song:hover {
+  background: #1f1f1f;
+}
+a {
+  color: #f0a500;
+  text-decoration: none;
+  font-weight: bold;
+}
+a:hover {
+  text-decoration: underline;
+}
+.date, .playcount {
+  color: #aaa;
+  font-size: 0.9em;
+  text-align: right;
+}
+
+/* playcount progress indicator */
+#playcountProgress {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(30,30,30,0.8);
+  color: #f0a500;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 0.85em;
+  z-index: 1000;
+}
+</style>
+</head>
+<body>
+<h1>My Liked Songs</h1>
+<div id="controls">
+  <button id="sortDate">Sort by Date</button>
+  <button id="sortPlayed">Sort by Most Listened</button>
+</div>
+<div id="songs">Loading liked tracks…</div>
+<div id="pagination" style="text-align:center; margin-top:20px;"></div>
+<div id="playcountProgress">Loading playcounts: 0 / 0</div>
+
+<script>
+const API_KEY = "d5180d76bc79811f5cfbc6967039dc8f";
+const USERNAME = "DVOID_ReASoN";
+const SONGS_PER_PAGE = 200;
+
+let allSongs = [];
+let currentPage = 1;
+
+// fetch all loved tracks incrementally
+async function fetchAllTracks() {
+  let page = 1;
+  let totalPages = 1;
+  allSongs = [];
+  
+  while (page <= totalPages) {
+    const res = await fetch(`https://ws.audioscrobbler.com/2.0/?method=user.getlovedtracks&user=${USERNAME}&api_key=${API_KEY}&format=json&limit=${SONGS_PER_PAGE}&page=${page}`);
+    const data = await res.json();
+    if (!data.lovedtracks) break;
+
+    const tracks = data.lovedtracks.track.map(t => ({
+      artist: t.artist.name,
+      name: t.name,
+      date: t.date ? new Date(parseInt(t.date.uts)*1000) : null,
+      playcount: null
+    }));
+
+    allSongs.push(...tracks);
+
+    // render immediately after each page fetch
+    allSongs.sort((a,b)=>b.date - a.date);
+    renderPage(1);
+    renderPagination();
+
+    totalPages = parseInt(data.lovedtracks['@attr'].totalPages);
+    page++;
+  }
+
+  // continue background playcount fetching
+  fetchPlaycountsInBackground();
+}
+
+// fetch playcount for a track
+async function fetchPlaycount(song, idx) {
+  try {
+    const res = await fetch(`https://ws.audioscrobbler.com/2.0/?method=track.getInfo&api_key=${API_KEY}&artist=${encodeURIComponent(song.artist)}&track=${encodeURIComponent(song.name)}&user=${USERNAME}&format=json`);
+    const data = await res.json();
+    if (data.track && data.track.userplaycount) {
+      song.playcount = parseInt(data.track.userplaycount);
+    } else {
+      song.playcount = 0;
+    }
+  } catch {
+    song.playcount = 0;
+  }
+  updateSongPlaycount(idx, song.playcount);
+}
+
+// update the playcount badge in the DOM
+function updateSongPlaycount(idx, playcount) {
+  const songDivs = document.querySelectorAll(".song");
+  const pageStart = (currentPage-1)*SONGS_PER_PAGE;
+  if(idx >= pageStart && idx < pageStart+SONGS_PER_PAGE){
+    const span = songDivs[idx-pageStart].querySelector(".playcount");
+    if(span) span.textContent = `${playcount} plays`;
+  }
+}
+
+// background fetching for all tracks with progress
+async function fetchPlaycountsInBackground() {
+  const progressEl = document.getElementById("playcountProgress");
+  let loadedCount = 0;
+
+  for(let i=0;i<allSongs.length;i++){
+    if(allSongs[i].playcount===null){
+      await fetchPlaycount(allSongs[i], i);
+      loadedCount++;
+      progressEl.textContent = `Loading playcounts: ${loadedCount} / ${allSongs.length}`;
+      await new Promise(r=>setTimeout(r, 100)); // keep API-friendly pacing
+    }
+  }
+  progressEl.textContent = `All playcounts loaded (${allSongs.length} tracks)`;
+}
+
+// render songs for a page
+function renderPage(page) {
+  currentPage = page;
+  const container = document.getElementById("songs");
+  container.innerHTML = "";
+  const start = (page-1)*SONGS_PER_PAGE;
+  const end = Math.min(start+SONGS_PER_PAGE, allSongs.length);
+  for (let i=start; i<end; i++) {
+    const song = allSongs[i];
+    const div = document.createElement("div");
+    div.className = "song";
+
+    const link = document.createElement("a");
+    link.target = "_blank";
+    link.href = `https://www.google.com/search?q=${encodeURIComponent(song.artist + " " + song.name + " site:youtube.com")}&btnI`;
+    link.textContent = `${song.artist} — ${song.name}`;
+
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "date";
+    dateSpan.textContent = song.date ? song.date.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}) : "";
+
+    const playSpan = document.createElement("span");
+    playSpan.className = "playcount";
+    playSpan.textContent = song.playcount !== null ? `${song.playcount} plays` : "loading…";
+
+    div.appendChild(link);
+    div.appendChild(dateSpan);
+    div.appendChild(playSpan);
+    container.appendChild(div);
+  }
+}
+
+// render pagination buttons
+function renderPagination() {
+  const container = document.getElementById("pagination");
+  container.innerHTML = "";
+  const totalPages = Math.ceil(allSongs.length/SONGS_PER_PAGE);
+
+  const firstBtn = document.createElement("button"); firstBtn.textContent="<<"; firstBtn.onclick=()=>renderPage(1); container.appendChild(firstBtn);
+  const prevBtn = document.createElement("button"); prevBtn.textContent="<"; prevBtn.onclick=()=>renderPage(Math.max(1,currentPage-1)); container.appendChild(prevBtn);
+
+  const startPage = Math.max(1,currentPage-5);
+  const endPage = Math.min(totalPages,startPage+9);
+  for(let i=startPage;i<=endPage;i++){
+    const btn = document.createElement("button");
+    btn.textContent = i;
+    btn.disabled = (i===currentPage);
+    btn.onclick = ()=>renderPage(i);
+    container.appendChild(btn);
+  }
+
+  const nextBtn = document.createElement("button"); nextBtn.textContent=">"; nextBtn.onclick=()=>renderPage(Math.min(totalPages,currentPage+1)); container.appendChild(nextBtn);
+  const lastBtn = document.createElement("button"); lastBtn.textContent=">>"; lastBtn.onclick=()=>renderPage(totalPages); container.appendChild(lastBtn);
+}
+
+// sort by date
+document.getElementById("sortDate").onclick = ()=>{
+  allSongs.sort((a,b)=>b.date - a.date);
+  renderPage(1);
+}
+
+// sort by most listened (progressive)
+document.getElementById("sortPlayed").onclick = ()=>{
+  allSongs.sort((a,b)=>{
+    const pa = a.playcount===null?0:a.playcount;
+    const pb = b.playcount===null?0:b.playcount;
+    return pb-pa;
+  });
+  renderPage(1);
+}
+
+fetchAllTracks();
+</script>
+</body>
+</html>
