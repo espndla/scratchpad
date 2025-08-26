@@ -122,8 +122,14 @@
         .video-info {
             font-size: 14px;
             color: #bbb;
-            margin-left: 0;
             margin-top: 4px;
+            display: block;
+        }
+
+        .channel-name {
+            font-size: 13px;
+            color: #888;
+            margin-top: 2px;
             display: block;
         }
 
@@ -197,6 +203,7 @@
                                 const title = item.snippet.title;
                                 const videoId = item.id;
                                 const thumbnailUrl = item.snippet.thumbnails.medium.url;
+                                const channel = item.snippet.channelTitle;
                                 const listItem = document.createElement('li');
                                 listItem.innerHTML = `
                                     <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">
@@ -205,6 +212,7 @@
                                     <div>
                                         <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">${title}</a>
                                         <span class="video-info">${formatViews(item.statistics.viewCount)} • ${formatDate(item.snippet.publishedAt)}</span>
+                                        <span class="channel-name">${channel}</span>
                                     </div>
                                 `;
                                 resultsList.appendChild(listItem);
@@ -236,6 +244,7 @@
                         const title = item.snippet.title;
                         const videoId = item.id;
                         const thumbnailUrl = item.snippet.thumbnails.medium.url;
+                        const channel = item.snippet.channelTitle;
                         const listItem = document.createElement('li');
                         listItem.innerHTML = `
                             <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">
@@ -244,6 +253,7 @@
                             <div>
                                 <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">${title}</a>
                                 <span class="video-info">${formatViews(item.statistics.viewCount)} • ${formatDate(item.snippet.publishedAt)}</span>
+                                <span class="channel-name">${channel}</span>
                             </div>
                         `;
                         trendingList.appendChild(listItem);
